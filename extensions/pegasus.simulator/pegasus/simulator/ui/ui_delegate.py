@@ -24,6 +24,8 @@ from pegasus.simulator.logic.vehicles.multirotor import Multirotor, MultirotorCo
 from pegasus.simulator.logic.vehicle_manager import VehicleManager
 from pegasus.simulator.logic.graphical_sensors.monocular_camera import MonocularCamera
 
+from pegasus.simulator.logic.graphical_sensors.cameras_cfg import TOP_LEFT_CFG, TOP_RIGHT_CFG, BOTTOM_LEFT_CFG, BOTTOM_RIGHT_CFG
+
 try:
     from pegasus.simulator.logic.backends import ROS2Backend
     ROS2_available = True
@@ -287,7 +289,12 @@ class UIDelegate:
                 # Create the multirotor configuration
                 config_multirotor = MultirotorConfig()
                 config_multirotor.backends = [backend]
-                config_multirotor.graphical_sensors = [MonocularCamera("camera", config={"update_rate": 60.0})]
+                config_multirotor.graphical_sensors = [
+                    MonocularCamera("top_left_camera", TOP_LEFT_CFG),
+                    MonocularCamera("top_right_camera", TOP_RIGHT_CFG),
+                    MonocularCamera("bottom_left_camera", BOTTOM_LEFT_CFG),
+                    MonocularCamera("bottom_right_camera", BOTTOM_RIGHT_CFG),
+                ]
                 
                 # Try to spawn the selected robot in the world to the specified namespace
                 Multirotor(

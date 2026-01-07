@@ -16,6 +16,7 @@ from omni.usd import get_stage_next_free_path
 # Auxiliary scipy and numpy modules
 import numpy as np
 from scipy.spatial.transform import Rotation
+import carb
 
 
 class MonocularCamera(GraphicalSensor):
@@ -43,7 +44,10 @@ class MonocularCamera(GraphicalSensor):
             >>> "frequency": 30,
             >>> "intrinsics": np.array([[958.8, 0.0, 957.8], [0.0, 956.7, 589.5], [0.0, 0.0, 1.0]]),
             >>> "distortion_coefficients": [0.14, -0.03, -0.0002, -0.00003, 0.009, 0.5, -0.07, 0.017]),
-            >>> "diagonal_fov": 140.0}
+            >>> "diagonal_fov": 140.0,
+            >>> "pixel_size": 3,  # in micrometers
+            >>> "f_stop": 2.8,
+            >>> "focus_distance": 1000000}  # in meters
         """
 
         # Initialize the Super class "object" attributes
@@ -62,6 +66,9 @@ class MonocularCamera(GraphicalSensor):
         self._intrinsics = config.get("intrinsics", np.array([[958.8, 0.0, 957.8], [0.0, 956.7, 589.5], [0.0, 0.0, 1.0]]))
         self._distortion_coefficients = config.get("distortion_coefficients",[0.14, -0.03, -0.0002, -0.00003, 0.009, 0.5, -0.07, 0.017])
         self._diagonal_fov = config.get("diagonal_fov", 140.0)
+        self._pixel_size = config.get("pixel_size", 3)  # in micrometers
+        self._f_stop = config.get("f_stop", 2.8)
+        self._focus_distance = config.get("focus_distance", 1000000)  # in meters
 
         # Setup an empty camera output dictionary
         self._state = {}
@@ -97,12 +104,24 @@ class MonocularCamera(GraphicalSensor):
 
         # Start the camera
         self._camera.initialize()
+        carb.log_warn("Initialized camera: " + str(self._camera_name))
+
+        horizontal_aperture = self._pixel_size * self._resolution[0] * 1e-6
+        vertical_aperture = self._pixel_size * self._resolution[1] * 1e-6
+        focal_length = self._pixel_size * (fx + fy) / 2 * 1e-6
 
         # Set the correct properties of the camera (this must be done after the camera object is initialized)
-        self._camera.set_lens_distortion_model("OmniLensDistortionOpenCvPinholeAPI")
-        self._camera.set_rational_polynomial_properties(nominal_width=self._resolution[0], nominal_height=self._resolution[1], optical_centre_x=cx, optical_centre_y=cy, max_fov=self._diagonal_fov, distortion_model=self._distortion_coefficients)
+        # self._camera.set_lens_distortion_model("OmniLensDistortionOpenCvPinholeAPI")
+        # self._camera.set_rational_polynomial_properties(nominal_width=self._resolution[0], nominal_height=self._resolution[1], optical_centre_x=cx, optical_centre_y=cy, max_fov=self._diagonal_fov, distortion_model=self._distortion_coefficients)
+        
+        self._camera.set_focal_length(focal_length)
+        self._camera.set_lens_aperture(self._f_stop)
+        self._camera.set_horizontal_aperture(horizontal_aperture)
+        self._camera.set_vertical_aperture(vertical_aperture)
+        self._camera.set_focus_distance(self._focus_distance)
         self._camera.set_clipping_range(0.05, 100.0)
-
+        self._camera.set_opencv_pinhole_properties(cx=cx, cy=cy, fx=fx, fy=fy, pinhole=self._distortion_coefficients)
+        carb.log_warn("Set camera properties for camera: " + str(self._camera_name))
         # Check if depth is enabled, if so, set the depth properties
         if self._depth:
             self._camera.add_distance_to_image_plane_to_frame()

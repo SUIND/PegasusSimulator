@@ -291,7 +291,7 @@ class PegasusInterface:
         if not looks_prim:
             looks_prim = stage.DefinePrim("/World/Looks", "Xform")
         looks_prim.GetReferences().AddReference(
-            "/isaac-sim/Isaac-Sim-Tree-Generator/Terrain/Forrest.Material.usd"
+            "/isaac-sim/Nvidia-Isaac-Sim-Tree-Generator/Terrain/Forrest.Material.usd"
         )
         material_path = "/World/Looks/forrest_ground_01"
         material_prim = stage.GetPrimAtPath(material_path)
