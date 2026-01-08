@@ -42,7 +42,7 @@ fx, fy, cx, cy = intrinsics["top_left"][0]
 dist = intrinsics["top_left"][1]
 
 TOP_LEFT_CFG = { 
-    "position": np.array([0.15, 0.0, 0.0]),
+    "position": np.array([0.15, 0.10, 0.0]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([
@@ -58,7 +58,7 @@ fx, fy, cx, cy = intrinsics["top_right"][0]
 dist = intrinsics["top_right"][1]
 
 TOP_RIGHT_CFG = { 
-    "position": np.array([0.15, -0.1998715819981644, 0.0]),
+    "position": np.array([0.15, -0.10, 0.0]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([
@@ -74,8 +74,8 @@ fx, fy, cx, cy = intrinsics["bottom_left"][0]
 dist = intrinsics["bottom_left"][1]
 
 BOTTOM_LEFT_CFG = { 
-    "position": np.array([0.15, 0.0, 0.0]),
-    "orientation": np.array([0, -15, 0]),
+    "position": np.array([0.15, 0.08, 0.0]),
+    "orientation": np.array([0, -15, 180]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([
@@ -91,8 +91,8 @@ fx, fy, cx, cy = intrinsics["bottom_right"][0]
 dist = intrinsics["bottom_right"][1]
 
 BOTTOM_RIGHT_CFG = { 
-    "position": np.array([0.15, 0.0, 0.0]),
-    "orientation": np.array([0, -15, 0]),
+    "position": np.array([0.15, -0.08, 0.0]),
+    "orientation": np.array([0, -15, 180]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([

@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 # Omniverse extensions
 import carb
 import omni.ui as ui
+import omni.graph.core as og
 
 # Extension Configurations
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS, BACKENDS, WORLD_SETTINGS
@@ -200,6 +201,79 @@ class UIDelegate:
         """
         self._pegasus_sim.clear_scene()
 
+    
+
+    def setup_camera_graph(self):
+        
+        keys = og.Controller.Keys
+
+        (graph, node_list, _, __) = og.Controller.edit(
+            {"graph_path": "/camera_graph", "evaluator_name": "execution"},
+            {
+                keys.CREATE_NODES: [
+                    ("tick", "omni.graph.action.OnPlaybackTick"),
+                    ("run_once", "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame"),
+                    ("context", "isaacsim.ros2.bridge.ROS2Context"),
+                    ("render_top_left", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                    ("render_top_right", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                    ("render_bottom_left", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                    ("render_bottom_right", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                    ("camera_top_left", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    ("camera_top_right", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    ("camera_bottom_left", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    ("camera_bottom_right", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ],
+                keys.SET_VALUES: [
+                    ("render_top_left.inputs:cameraPrim", "/World/quadrotor/body/top_left_camera"),
+                    ("render_top_right.inputs:cameraPrim", "/World/quadrotor/body/top_right_camera"),
+                    ("render_bottom_left.inputs:cameraPrim", "/World/quadrotor/body/bottom_left_camera"),
+                    ("render_bottom_right.inputs:cameraPrim", "/World/quadrotor/body/bottom_right_camera"),
+                    ("render_top_left.inputs:width", 640),
+                    ("render_top_right.inputs:width", 640),
+                    ("render_bottom_left.inputs:width", 640),
+                    ("render_bottom_right.inputs:width", 640),
+                    ("render_top_left.inputs:height", 400),
+                    ("render_top_right.inputs:height", 400),
+                    ("render_bottom_left.inputs:height", 400),
+                    ("render_bottom_right.inputs:height", 400),
+                    ("camera_top_left.inputs:type", "rgb"),
+                    ("camera_top_right.inputs:type", "rgb"),
+                    ("camera_bottom_left.inputs:type", "rgb"),
+                    ("camera_bottom_right.inputs:type", "rgb"),
+                    ("camera_top_left.inputs:topicName", "/camera/top_left/image_raw"),
+                    ("camera_top_right.inputs:topicName", "/camera/top_right/image_raw"),
+                    ("camera_bottom_left.inputs:topicName", "/camera/bottom_left/image_raw"),
+                    ("camera_bottom_right.inputs:topicName", "/camera/bottom_right/image_raw"),
+                    ("camera_top_left.inputs:frameId", "body_front"),
+                    ("camera_top_right.inputs:frameId", "body_front"),
+                    ("camera_bottom_left.inputs:frameId", "body_bottom"),
+                    ("camera_bottom_right.inputs:frameId", "body_bottom"),
+                ],
+                keys.CONNECT: [
+                    ("tick.outputs:tick", "run_once.inputs:execIn"),
+                    ("run_once.outputs:step", "render_top_left.inputs:execIn"),
+                    ("run_once.outputs:step", "render_top_right.inputs:execIn"),
+                    ("run_once.outputs:step", "render_bottom_left.inputs:execIn"),
+                    ("run_once.outputs:step", "render_bottom_right.inputs:execIn"),
+                    ("context.outputs:context", "camera_top_left.inputs:context"),
+                    ("context.outputs:context", "camera_top_right.inputs:context"),
+                    ("context.outputs:context", "camera_bottom_left.inputs:context"),
+                    ("context.outputs:context", "camera_bottom_right.inputs:context"),
+                    ("render_top_left.outputs:execOut", "camera_top_left.inputs:execIn"),
+                    ("render_top_right.outputs:execOut", "camera_top_right.inputs:execIn"),
+                    ("render_bottom_left.outputs:execOut", "camera_bottom_left.inputs:execIn"),
+                    ("render_bottom_right.outputs:execOut", "camera_bottom_right.inputs:execIn"),
+                    ("render_top_left.outputs:renderProductPath", "camera_top_left.inputs:renderProductPath"),
+                    ("render_top_right.outputs:renderProductPath", "camera_top_right.inputs:renderProductPath"),
+                    ("render_bottom_left.outputs:renderProductPath", "camera_bottom_left.inputs:renderProductPath"),
+                    ("render_bottom_right.outputs:renderProductPath", "camera_bottom_right.inputs:renderProductPath"),
+                ],
+            },
+        )
+        return graph, node_list
+
+    
+
     def on_load_vehicle(self):
         """
         Method that should be invoked when the button to load the selected vehicle is pressed
@@ -313,7 +387,10 @@ class UIDelegate:
                 carb.log_error("Could not spawn the robot using the Pegasus Simulator UI")
 
         # Run the actual vehicle spawn async so that the UI does not freeze
-        asyncio.ensure_future(async_load_vehicle())        
+        asyncio.ensure_future(async_load_vehicle())    
+        
+        self.setup_camera_graph()
+        carb.log_info("Camera graph and ROS2 nodes successfully created!")    
 
     def on_set_viewport_camera(self):
         """

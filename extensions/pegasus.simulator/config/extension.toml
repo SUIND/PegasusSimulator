@@ -40,6 +40,8 @@ icon = "data/icon.png"
 "omni.isaac.core" = {}
 "omni.ui.scene" = {}
 "omni.kit.capture.viewport" = {}
+"omni.kit.widget.viewport" = {}
+"omni.kit.hydra_texture" = {}
 "isaacsim.replicator.agent.core" = {}
 
 # Main python module this extension provides, it will be publicly available as "import pegasus.simulator".
