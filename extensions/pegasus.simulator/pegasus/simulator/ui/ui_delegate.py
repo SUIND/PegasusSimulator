@@ -14,7 +14,8 @@ from scipy.spatial.transform import Rotation
 import carb
 import omni.ui as ui
 import omni.graph.core as og
-
+from omni.isaac.core.utils.stage import add_reference_to_stage, get_current_stage
+from pxr import Usd, UsdGeom
 # Extension Configurations
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS, BACKENDS, WORLD_SETTINGS
 from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
@@ -204,6 +205,9 @@ class UIDelegate:
     
 
     def setup_camera_graph(self):
+        """
+        Method that will create the graph to handle the camera streaming via ROS2
+        """
         
         keys = og.Controller.Keys
 
@@ -214,6 +218,8 @@ class UIDelegate:
                     ("tick", "omni.graph.action.OnPlaybackTick"),
                     ("run_once", "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame"),
                     ("context", "isaacsim.ros2.bridge.ROS2Context"),
+                    ("simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                    ("clock", "isaacsim.ros2.bridge.ROS2PublishClock"),
                     ("render_top_left", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                     ("render_top_right", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                     ("render_bottom_left", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
@@ -251,6 +257,9 @@ class UIDelegate:
                 ],
                 keys.CONNECT: [
                     ("tick.outputs:tick", "run_once.inputs:execIn"),
+                    ("tick.outputs:tick", "clock.inputs:execIn"),
+                    ("context.outputs:context", "clock.inputs:context"),
+                    ("simulation_time.outputs:simulationTime", "clock.inputs:timeStamp"),
                     ("run_once.outputs:step", "render_top_left.inputs:execIn"),
                     ("run_once.outputs:step", "render_top_right.inputs:execIn"),
                     ("run_once.outputs:step", "render_bottom_left.inputs:execIn"),
@@ -272,7 +281,42 @@ class UIDelegate:
         )
         return graph, node_list
 
-    
+    def get_tree_transform_graph(self):
+        """
+        Method that will create the graph to handle the camera tree transform
+        """
+        stage = get_current_stage()
+
+        parent_prim = stage.GetPrimAtPath("/World/Tree_parent")
+
+        if not parent_prim:
+            carb.log_error("Parent prim for tree transform not found.")
+        else:
+            child_xforms = [p for p in parent_prim.GetAllChildren() if UsdGeom.Xform(p)]
+            print(f"Number of child Xform prims under Tree_parent: {len(child_xforms)}")
+        keys = og.Controller.Keys
+
+        (graph, node_list, _, __) = og.Controller.edit(
+            {"graph_path": "/tree_transform_graph", "evaluator_name": "execution"},
+            {
+                keys.CREATE_NODES: [
+                    ("tick", "omni.graph.action.OnPlaybackTick"),
+                    ("context", "isaacsim.ros2.bridge.ROS2Context"),
+                    ("simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                    ("tree_transform", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
+                ],
+                keys.SET_VALUES: [
+                    ("tree_transform.inputs:parentPrim", "/World/quadrotor/body"),
+                    ("tree_transform.inputs:targetPrims", [p.GetPath().pathString for p in child_xforms]),
+                ],
+                keys.CONNECT: [
+                    ("tick.outputs:tick", "tree_transform.inputs:execIn"),
+                    ("context.outputs:context", "tree_transform.inputs:context"),
+                    ("simulation_time.outputs:simulationTime", "tree_transform.inputs:timeStamp"),
+                ],
+            },
+        )
+
 
     def on_load_vehicle(self):
         """
@@ -390,6 +434,7 @@ class UIDelegate:
         asyncio.ensure_future(async_load_vehicle())    
         
         self.setup_camera_graph()
+        self.get_tree_transform_graph()
         carb.log_info("Camera graph and ROS2 nodes successfully created!")    
 
     def on_set_viewport_camera(self):

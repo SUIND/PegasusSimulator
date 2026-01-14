@@ -72,6 +72,7 @@ class ArduPilotLaunchTool:
             "-I", f"{self.vehicle_id}",
             "--sysid", f"{self.vehicle_id + 1}",
             "--out", f"udp:127.0.0.1:{14550 + self.vehicle_id * 10}",
+            "--out", f"udp:127.0.0.1:{14551 + self.vehicle_id * 10}",
         ]
         command: str = " ".join(command)
         
