@@ -286,27 +286,28 @@ class PegasusInterface:
         except Exception as e:
             carb.log_warn("Could not load the desired environment: " + str(e))
 
-        stage = omni.usd.get_context().get_stage()
-        looks_prim = stage.GetPrimAtPath("/World/Looks")
-        if not looks_prim:
-            looks_prim = stage.DefinePrim("/World/Looks", "Xform")
-        looks_prim.GetReferences().AddReference(
-            "/isaac-sim/Nvidia-Isaac-Sim-Tree-Generator/Terrain/Forrest.Material.usd"
-        )
-        material_path = "/World/Looks/forrest_ground_01"
-        material_prim = stage.GetPrimAtPath(material_path)
+        if usd_path.endswith("flat_plane.usd"):
+            stage = omni.usd.get_context().get_stage()
+            looks_prim = stage.GetPrimAtPath("/World/Looks")
+            if not looks_prim:
+                looks_prim = stage.DefinePrim("/World/Looks", "Xform")
+            looks_prim.GetReferences().AddReference(
+                "/isaac-sim/Nvidia-Isaac-Sim-Tree-Generator/Terrain/Forrest.Material.usd"
+            )
+            material_path = "/World/Looks/forrest_ground_01"
+            material_prim = stage.GetPrimAtPath(material_path)
 
-        if not material_prim.IsValid():
-            carb.log_warn(f"Material not found at {material_path}")
-            return
+            if not material_prim.IsValid():
+                carb.log_warn(f"Material not found at {material_path}")
+                return
 
-        material = UsdShade.Material(material_prim)
+            material = UsdShade.Material(material_prim)
 
-        terrain_root = stage.GetPrimAtPath("/World/layout")
+            terrain_root = stage.GetPrimAtPath("/World/layout")
 
-        for prim in Usd.PrimRange(terrain_root):
-            if prim.IsA(UsdGeom.Mesh):
-                UsdShade.MaterialBindingAPI.Apply(prim).Bind(material)
+            for prim in Usd.PrimRange(terrain_root):
+                if prim.IsA(UsdGeom.Mesh):
+                    UsdShade.MaterialBindingAPI.Apply(prim).Bind(material)
 
 
         carb.log_info("A new environment has been loaded successfully")
