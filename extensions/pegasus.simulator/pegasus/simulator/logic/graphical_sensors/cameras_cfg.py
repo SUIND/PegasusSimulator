@@ -75,7 +75,7 @@ dist = intrinsics["bottom_left"][1]
 
 BOTTOM_LEFT_CFG = { 
     "position": np.array([0.15, 0.08, 0.0]),
-    "orientation": np.array([0, -15, 180]),
+    "orientation": np.array([0, -90, 180]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([
@@ -92,7 +92,7 @@ dist = intrinsics["bottom_right"][1]
 
 BOTTOM_RIGHT_CFG = { 
     "position": np.array([0.15, -0.08, 0.0]),
-    "orientation": np.array([0, -15, 180]),
+    "orientation": np.array([0, -90, 180]),
     "resolution": (width, height),
     "frequency": 15,
     "intrinsics": np.array([
