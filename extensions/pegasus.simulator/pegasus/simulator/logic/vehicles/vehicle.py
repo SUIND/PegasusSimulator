@@ -219,6 +219,7 @@ class Vehicle(Robot):
             # Initialize the graphical sensors
             for graphical_sensor in self._graphical_sensors:
                 graphical_sensor.start()
+                graphical_sensor.publish_camera_info()
 
             # Intializes the communication with all the backends. This method is invoked automatically when the simulation starts
             for backend in self._backends:

@@ -11,7 +11,12 @@ from pegasus.simulator.logic.graphical_sensors import GraphicalSensor
 from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
 
 from isaacsim.sensors.camera.camera import Camera
+from isaacsim.sensors.camera import SingleViewDepthSensor
+import isaacsim.core.utils.numpy.rotations as rot_utils
+
 from omni.usd import get_stage_next_free_path
+import omni
+import omni.graph.core as og
 
 # Auxiliary scipy and numpy modules
 import numpy as np
@@ -131,6 +136,44 @@ class MonocularCamera(GraphicalSensor):
 
     def stop(self):
         self._camera_full_set = False
+
+    def publish_camera_info(self, freq=15):
+        from isaacsim.ros2.bridge import read_camera_info
+        import omni.replicator.core as rep
+        # The following code will link the camera's render product and publish the data to the specified topic name.
+        render_product = self._camera._render_product_path
+        step_size = int(60/freq)
+        topic_name = "camera_info"
+        queue_size = 1
+        node_namespace = f"camera/{self._camera_name}"
+        node_namespace = node_namespace[:-7] # strip camera
+        frame_id = self._camera.prim_path.split("/")[-1] 
+
+        writer = rep.writers.get("ROS2PublishCameraInfo")
+        camera_info, _ = read_camera_info(render_product_path=render_product)
+        writer.initialize(
+            frameId=frame_id,
+            nodeNamespace=node_namespace,
+            queueSize=queue_size,
+            topicName=topic_name,
+            width=camera_info.width,
+            height=camera_info.height,
+            projectionType=camera_info.distortion_model,
+            k=camera_info.k.reshape([1, 9]),
+            r=camera_info.r.reshape([1, 9]),
+            p=camera_info.p.reshape([1, 12]),
+            physicalDistortionModel=camera_info.distortion_model,
+            physicalDistortionCoefficients=camera_info.d,
+        )
+        writer.attach([render_product])
+
+        gate_path = omni.syntheticdata.SyntheticData._get_node_path(
+            "PostProcessDispatch" + "IsaacSimulationGate", render_product
+        )
+
+        # Set step input of the Isaac Simulation Gate nodes upstream of ROS publishers to control their execution rate
+        og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
+        return
 
     @property
     def state(self):
