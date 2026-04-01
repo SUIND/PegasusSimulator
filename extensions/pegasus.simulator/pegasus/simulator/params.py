@@ -34,6 +34,7 @@ ROBOTS = {"Iris": ROBOTS_ASSETS + "/Iris/iris.usd"} #, "Flying Cube": ROBOTS_ASS
 NVIDIA_ASSETS_PATH = str(nucleus.get_assets_root_path())
 ISAAC_SIM_ENVIRONMENTS = "/Isaac/Environments"
 NVIDIA_SIMULATION_ENVIRONMENTS = {
+    "Flat Plane": "Terrains/flat_plane.usd",
     "Default Environment": "Grid/default_environment.usd",
     "Black Gridroom": "Grid/gridroom_black.usd",
     "Curved Gridroom": "Grid/gridroom_curved.usd",
@@ -44,7 +45,6 @@ NVIDIA_SIMULATION_ENVIRONMENTS = {
     "Warehouse with Forklifts": "Simple_Warehouse/warehouse_with_forklifts.usd",
     "Warehouse with Shelves": "Simple_Warehouse/warehouse_multiple_shelves.usd",
     "Full Warehouse": "Simple_Warehouse/full_warehouse.usd",
-    "Flat Plane": "Terrains/flat_plane.usd",
     "Rough Plane": "Terrains/rough_plane.usd",
     "Slope Plane": "Terrains/slope.usd",
     "Stairs Plane": "Terrains/stairs.usd",

@@ -145,12 +145,32 @@ class MonocularCamera(GraphicalSensor):
         step_size = int(60/freq)
         topic_name = "camera_info"
         queue_size = 1
-        node_namespace = f"camera/{self._camera_name}"
-        node_namespace = node_namespace[:-7] # strip camera
+        parts = self._camera_name.split("_") 
+        node_namespace = f"cam/{parts[0]}/{parts[1]}/half"
+        # node_namespace = node_namespace[:-7] # strip camera
         frame_id = self._camera.prim_path.split("/")[-1] 
 
         writer = rep.writers.get("ROS2PublishCameraInfo")
         camera_info, _ = read_camera_info(render_product_path=render_product)
+
+        p_matrix = camera_info.p.reshape([1, 12])
+
+
+        if "right" in self._camera_name:
+
+            fx = 454.53
+            cx = 346.71
+            cy = 209.68
+            baseline_mm = 160.0
+
+            p_right = np.array([
+                fx, 0.0, cx, -fx * baseline_mm,
+                0.0, fx, cy, 0.0,
+                0.0, 0.0, 1.0, 0.0
+            ], dtype=np.float32).reshape(1, 12)
+
+            p_matrix = p_right
+        
         writer.initialize(
             frameId=frame_id,
             nodeNamespace=node_namespace,
@@ -161,7 +181,7 @@ class MonocularCamera(GraphicalSensor):
             projectionType=camera_info.distortion_model,
             k=camera_info.k.reshape([1, 9]),
             r=camera_info.r.reshape([1, 9]),
-            p=camera_info.p.reshape([1, 12]),
+            p=p_matrix,
             physicalDistortionModel=camera_info.distortion_model,
             physicalDistortionCoefficients=camera_info.d,
         )

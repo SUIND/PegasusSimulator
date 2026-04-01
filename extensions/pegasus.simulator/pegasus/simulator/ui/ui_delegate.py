@@ -27,7 +27,7 @@ from pegasus.simulator.logic.vehicles.multirotor import Multirotor, MultirotorCo
 from pegasus.simulator.logic.vehicle_manager import VehicleManager
 from pegasus.simulator.logic.graphical_sensors.monocular_camera import MonocularCamera
 
-from pegasus.simulator.logic.graphical_sensors.cameras_cfg import TOP_LEFT_CFG, TOP_RIGHT_CFG, BOTTOM_LEFT_CFG, BOTTOM_RIGHT_CFG, DISPARITY_CFG
+from pegasus.simulator.logic.graphical_sensors.cameras_cfg import TOP_LEFT_CFG, TOP_RIGHT_CFG, BOTTOM_LEFT_CFG, BOTTOM_RIGHT_CFG
 
 try:
     from pegasus.simulator.logic.backends import ROS2Backend
@@ -233,6 +233,10 @@ class UIDelegate:
                     ("top_right_depth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                     ("bottom_left_depth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                     ("bottom_right_depth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    # ("top_left_bbox", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    # ("top_right_bbox", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    ("bottom_left_bbox", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                    ("bottom_right_bbox", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                 ],
                 keys.SET_VALUES: [
                     ("render_top_left.inputs:cameraPrim", "/World/quadrotor/body/top_left_camera"),
@@ -255,14 +259,24 @@ class UIDelegate:
                     ("top_right_depth.inputs:type", "depth"),
                     ("bottom_left_depth.inputs:type", "depth"),
                     ("bottom_right_depth.inputs:type", "depth"),
-                    ("top_left_rgb.inputs:topicName", "/camera/top_left/rgb/image_raw"),
-                    ("top_right_rgb.inputs:topicName", "/camera/top_right/rgb/image_raw"),
-                    ("bottom_left_rgb.inputs:topicName", "/camera/bottom_left/rgb/image_raw"),
-                    ("bottom_right_rgb.inputs:topicName", "/camera/bottom_right/rgb/image_raw"),
-                    ("top_left_depth.inputs:topicName", "/camera/top_left/depth/image_raw"),
-                    ("top_right_depth.inputs:topicName", "/camera/top_right/depth/image_raw"),
-                    ("bottom_left_depth.inputs:topicName", "/camera/bottom_left/depth/image_raw"),
-                    ("bottom_right_depth.inputs:topicName", "/camera/bottom_right/depth/image_raw"),
+                    # ("top_left_bbox.inputs:type", "bbox_2d_tight"),
+                    # ("top_right_bbox.inputs:type", "bbox_2d_tight"),
+                    ("bottom_left_bbox.inputs:type", "bbox_2d_tight"),
+                    ("bottom_right_bbox.inputs:type", "bbox_2d_tight"),
+                    ("top_left_rgb.inputs:topicName", "/cam/top/left/half/rgb/image_raw"),
+                    ("top_right_rgb.inputs:topicName", "/cam/top/right/half/rgb/image_raw"),
+                    ("bottom_left_rgb.inputs:topicName", "/cam/bottom/left/half/rgb/image_raw"),
+                    ("bottom_right_rgb.inputs:topicName", "/cam/bottom/right/half/rgb/image_raw"),
+                    ("top_left_depth.inputs:topicName", "/cam/top/left/half/depth/image_raw"),
+                    ("top_right_depth.inputs:topicName", "/cam/top/right/half/depth/image_raw"),
+                    ("bottom_left_depth.inputs:topicName", "/cam/bottom/left/half/depth/image_raw"),
+                    ("bottom_right_depth.inputs:topicName", "/cam/bottom/right/depth/image_raw"),
+                    # ("top_left_bbox.inputs:topicName", "/camera/top_left/depth/image_raw"),
+                    # ("top_right_bbox.inputs:topicName", "/camera/top_right/depth/image_raw"),
+                    ("bottom_left_bbox.inputs:topicName", "/object_detection/detections"),
+                    ("bottom_right_bbox.inputs:topicName", "/object_detection/detections"),
+                    ("bottom_left_bbox.inputs:enableSemanticLabels", True),
+                    ("bottom_right_bbox.inputs:enableSemanticLabels", True),
                     ("top_left_rgb.inputs:frameId", "body_front"),
                     ("top_right_rgb.inputs:frameId", "body_front"),
                     ("bottom_left_rgb.inputs:frameId", "body_bottom"),
@@ -271,6 +285,8 @@ class UIDelegate:
                     ("top_right_depth.inputs:frameId", "body_front"),
                     ("bottom_left_depth.inputs:frameId", "body_bottom"),
                     ("bottom_right_depth.inputs:frameId", "body_bottom"),
+                    ("bottom_left_bbox.inputs:frameId", "body_bottom"),
+                    ("bottom_right_bbox.inputs:frameId", "body_bottom")
                 ],
                 keys.CONNECT: [
                     ("tick.outputs:tick", "run_once.inputs:execIn"),
@@ -289,6 +305,8 @@ class UIDelegate:
                     ("context.outputs:context", "top_right_depth.inputs:context"),
                     ("context.outputs:context", "bottom_left_depth.inputs:context"),
                     ("context.outputs:context", "bottom_right_depth.inputs:context"),
+                    ("context.outputs:context", "bottom_left_bbox.inputs:context"),
+                    ("context.outputs:context", "bottom_right_bbox.inputs:context"),
                     ("render_top_left.outputs:execOut", "top_left_rgb.inputs:execIn"),
                     ("render_top_right.outputs:execOut", "top_right_rgb.inputs:execIn"),
                     ("render_bottom_left.outputs:execOut", "bottom_left_rgb.inputs:execIn"),
@@ -297,6 +315,8 @@ class UIDelegate:
                     ("render_top_right.outputs:execOut", "top_right_depth.inputs:execIn"),
                     ("render_bottom_left.outputs:execOut", "bottom_left_depth.inputs:execIn"),
                     ("render_bottom_right.outputs:execOut", "bottom_right_depth.inputs:execIn"),
+                    ("render_bottom_left.outputs:execOut", "bottom_left_bbox.inputs:execIn"),
+                    ("render_bottom_right.outputs:execOut", "bottom_right_bbox.inputs:execIn"),
                     ("render_top_left.outputs:renderProductPath", "top_left_rgb.inputs:renderProductPath"),
                     ("render_top_right.outputs:renderProductPath", "top_right_rgb.inputs:renderProductPath"),
                     ("render_bottom_left.outputs:renderProductPath", "bottom_left_rgb.inputs:renderProductPath"),
@@ -305,6 +325,8 @@ class UIDelegate:
                     ("render_top_right.outputs:renderProductPath", "top_right_depth.inputs:renderProductPath"),
                     ("render_bottom_left.outputs:renderProductPath", "bottom_left_depth.inputs:renderProductPath"),
                     ("render_bottom_right.outputs:renderProductPath", "bottom_right_depth.inputs:renderProductPath"),
+                    ("render_bottom_left.outputs:renderProductPath", "bottom_left_bbox.inputs:renderProductPath"),
+                    ("render_bottom_right.outputs:renderProductPath", "bottom_right_bbox.inputs:renderProductPath"),
                 ],
             },
         )
@@ -334,21 +356,26 @@ class UIDelegate:
                     ("simulation_time", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                     ("tree_transform", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
                     ("camera_transform", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
+                    ("drone_transform", "isaacsim.ros2.bridge.ROS2PublishTransformTree")
                 ],
                 keys.SET_VALUES: [
                     # ("tree_transform.inputs:parentPrim", "/World/quadrotor/body"),
                     # ("camera_transform.inputs:parentPrim", "/World/quadrotor/body"),
                     ("tree_transform.inputs:targetPrims", [p.GetPath().pathString for p in child_xforms]),
                     ("camera_transform.inputs:targetPrims", ["/World/quadrotor/body/bottom_left_camera", "/World/quadrotor/body/bottom_right_camera"]),
-                    ("camera_transform.inputs:topicName", "tf_camera"),
+                    ("camera_transform.inputs:topicName", "tf_static"),
+                    ("drone_transform.inputs:targetPrims", ["/World/quadrotor/body"]),
                 ],
                 keys.CONNECT: [
                     ("tick.outputs:tick", "tree_transform.inputs:execIn"),
                     ("tick.outputs:tick", "camera_transform.inputs:execIn"),
+                    ("tick.outputs:tick", "drone_transform.inputs:execIn"),
                     ("context.outputs:context", "tree_transform.inputs:context"),
                     ("context.outputs:context", "camera_transform.inputs:context"),
+                    ("context.outputs:context", "drone_transform.inputs:context"),
                     ("simulation_time.outputs:simulationTime", "tree_transform.inputs:timeStamp"),
                     ("simulation_time.outputs:simulationTime", "camera_transform.inputs:timeStamp"),
+                    ("simulation_time.outputs:simulationTime", "drone_transform.inputs:timeStamp"),
          
                 ],
             },
@@ -456,7 +483,6 @@ class UIDelegate:
                     MonocularCamera("top_right_camera", TOP_RIGHT_CFG),
                     MonocularCamera("bottom_left_camera", BOTTOM_LEFT_CFG),
                     MonocularCamera("bottom_right_camera", BOTTOM_RIGHT_CFG),
-                    MonocularCamera("front_disparity_camera", DISPARITY_CFG),
                 ]
                 
                 # Try to spawn the selected robot in the world to the specified namespace
