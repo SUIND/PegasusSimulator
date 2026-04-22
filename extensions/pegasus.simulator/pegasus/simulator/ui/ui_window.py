@@ -315,6 +315,44 @@ class WidgetWindow(ui.Window):
             # Handle the logic of switching between the two operating modes
             self._delegate.set_streaming_backend(button)
 
+        # def handle_perception_mode_switch(self, vision_pipeline_button, ground_truth_button, mode):
+
+        #     if mode == "vision_pipeline":
+        #         vision_pipeline_button.enabled = False
+        #         ground_truth_button.enabled = True
+                
+        #         vision_pipeline_button.set_style(WidgetWindow.BUTTON_SELECTED_STYLE)
+        #         ground_truth_button.set_style(WidgetWindow.BUTTON_BASE_STYLE)
+
+        #     elif mode == "ground_truth":
+        #         vision_pipeline_button.enabled = True
+        #         ground_truth_button.enabled = False
+
+        #         vision_pipeline_button.set_style(WidgetWindow.BUTTON_BASE_STYLE)
+        #         ground_truth_button.set_style(WidgetWindow.BUTTON_SELECTED_STYLE)
+
+        # with ui.CollapsableFrame(title="Perception Mode Selection"):
+        #     ui.Spacer(height=0)
+        #     with ui.VStack(height=0, spacing=10, name="frame_v_stack"):
+        #         ui.Spacer(height=WidgetWindow.GENERAL_SPACING)
+        #         with ui.HStack():
+        #             vision_pipeline_button = ui.Button(
+        #                     "Vision Pipeline",
+        #                     height=WidgetWindow.BUTTON_HEIGHT,
+        #                     width=275,
+        #                     style=WidgetWindow.BUTTON_SELECTED_STYLE,
+        #                     enabled=True,
+        #                     visible=True,
+        #                 )
+        #             ground_truth_button = ui.Button(
+        #                     "Ground Truth",
+        #                     height=WidgetWindow.BUTTON_HEIGHT,
+        #                     width=275,
+        #                     style=WidgetWindow.BUTTON_SELECTED_STYLE,
+        #                     enabled=True,
+        #                     visible=True,
+        #                 )
+
         with ui.CollapsableFrame(title="Streaming Backend"):
             ui.Spacer(height=0)
             with ui.VStack(height=0, spacing=10, name="frame_v_stack"):
@@ -362,6 +400,12 @@ class WidgetWindow(ui.Window):
                 ardupilot_menu = ui.CollapsableFrame("Ardupilot Configurations", collapsed=False)
 
                 # Set the auxiliary function to handle the switch between both backends
+                # vision_pipeline_button.set_clicked_fn(lambda: handle_perception_mode_switch(
+                #     self, vision_pipeline_button, ground_truth_button, "vision_pipeline")
+                # )
+                # ground_truth_button.set_clicked_fn(lambda: handle_perception_mode_switch(
+                #     self, vision_pipeline_button, ground_truth_button, "ground_truth")
+                # )
                 px4_button.set_clicked_fn(lambda: handle_backend_switch(
                     self, px4_button, ardupilot_button, ros2_button, BACKENDS["px4"], logo_image, px4_menu, ardupilot_menu)
                 )
