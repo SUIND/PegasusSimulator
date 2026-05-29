@@ -204,7 +204,7 @@ class UIDelegate:
         self._pegasus_sim.clear_scene()
 
     
-
+    # This function creates ros camera topics, which will be published for isaac sim by pressing play
     def setup_camera_graph(self):
         """
         Method that will create the graph to handle the camera streaming via ROS2
@@ -332,6 +332,7 @@ class UIDelegate:
         )
         return graph, node_list
     
+    # This function creates ros tf topics, which will be published for isaac sim by pressing play
     def get_tree_transform_graph(self):
         """
         Method that will create the graph to handle the camera tree transform
@@ -409,12 +410,6 @@ class UIDelegate:
                 # Get the desired position and orientation of the vehicle from the UI transform
                 # pos, euler_angles = self._window.get_selected_vehicle_attitude()
                 pos ,euler_angles = self._window.get_selected_vehicle_attitude()
-                # with open('/isaac-sim/shared/global_values.json') as f:
-                #     data = json.load(f)
-
-                #     x_area = data['area_x']
-                #     y_area = data['area_y']
-                #     # pos = [-x_area/2,-y_area/2,0.07]
                 
                 backend_config: BackendConfig = None
                 backend: Backend = None
