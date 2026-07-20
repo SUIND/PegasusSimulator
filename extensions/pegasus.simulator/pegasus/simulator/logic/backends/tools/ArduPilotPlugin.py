@@ -190,8 +190,15 @@ class ArduPilotPlugin:
             # Receive the data and get the client address and port
             data, (client_addr, client_out) = self.motor_control_sock.recvfrom(self.SERVO_PACKET_SIZE)
 
-            # Store the FCU (ArduPilot SITL) address and port if not already set
-            if self.fcu_address is None or self.fcu_port_out is None:
+            # Track the FCU (ArduPilot SITL) return address on every packet.
+            # Latching it only once breaks SITL restarts: replies keep going to
+            # the dead ephemeral port of the previous instance (lockstep mode
+            # never marks ArduPilot offline, so the stale address is never
+            # cleared) and the new arducopter loops on "No JSON sensor message
+            # received".
+            if (client_addr, client_out) != (self.fcu_address, self.fcu_port_out):
+                if self.fcu_address is not None:
+                    print(f"ArduPilot endpoint changed to {client_addr}:{client_out}")
                 self.fcu_address = client_addr
                 self.fcu_port_out = client_out
 

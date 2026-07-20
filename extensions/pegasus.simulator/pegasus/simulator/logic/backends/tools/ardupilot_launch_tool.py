@@ -75,10 +75,31 @@ class ArduPilotLaunchTool:
                 p for p in env["LD_LIBRARY_PATH"].split(":") if "isaac-sim" not in p
             )
 
-        # The MAVProxy --console / --map widgets need an X display. Only request
-        # them (and a graphical terminal) when a display is actually available;
-        # otherwise run SITL headless in the background.
+        # The MAVProxy --console / --map widgets need an X display. DISPLAY being
+        # set is not enough: webgui/compose-launched runs inherit DISPLAY but hold
+        # no X authorization, and gnome-terminal then dies with "Cannot open
+        # display" -- taking SITL down with it. Probe the display with a throwaway
+        # gnome-terminal invocation (exits 0 once the command is handed to the
+        # terminal server, nonzero when the display is unusable) and fall back to
+        # a headless launch.
         has_display = bool(env.get("DISPLAY"))
+        if has_display:
+            try:
+                has_display = subprocess.run(
+                    ["gnome-terminal", "--", "true"],
+                    env=env,
+                    timeout=10,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ).returncode == 0
+            except (subprocess.TimeoutExpired, OSError):
+                has_display = False
+        if not has_display:
+            # sim_vehicle.py's run_in_terminal_window.sh also keys off DISPLAY
+            # (it wraps the arducopter binary in an xterm and dies on an
+            # unusable display, killing SITL). Drop DISPLAY so the whole
+            # process tree stays headless.
+            env.pop("DISPLAY", None)
 
         # sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON [--console --map]
         command = [
@@ -87,7 +108,9 @@ class ArduPilotLaunchTool:
             "-f", f"{self._get_vehicle_frame()}",
             "--model", f"{self.model}",
             f"{'--no-rebuild' if self._sitl_already_exists() else ''}",
-            f"{'--console --map' if has_display else ''}",
+            # headless: MAVProxy must run in --daemon mode -- without a tty its
+            # interactive console reads EOF on stdin and exits, killing SITL.
+            f"{'--console --map' if has_display else '--mavproxy-args=--daemon'}",
             "-I", f"{self.vehicle_id}",
             "--sysid", f"{self.vehicle_id + 1}",
             "--out", f"udp:127.0.0.1:{14550 + self.vehicle_id * 10}",
