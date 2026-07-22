@@ -8,6 +8,7 @@ import time
 import socket
 import struct
 import json
+import math
 from dataclasses import dataclass
 import random
 
@@ -100,6 +101,31 @@ class ArduPilotPlugin:
             ]
         }
 
+        # --- diagnostics/guard: never feed SITL non-finite values. arducopter
+        # runs with FP exceptions enabled, so a single NaN/inf in this JSON
+        # aborts it with SIGFPE ("fell down suddenly" + core dump). Log the
+        # first occurrences (crash-vs-starvation differentiator) and resend
+        # the last good state instead of the poisoned one.
+        flat = (state["imu"]["gyro"] + state["imu"]["accel_body"] + state["position"]
+                + state["quaternion"] + state["velocity"] + [state["timestamp"]])
+        if not all(math.isfinite(v) for v in flat):
+            self._nonfinite_count = getattr(self, "_nonfinite_count", 0) + 1
+            if self._nonfinite_count <= 5:
+                print(f"[ArduPilotPlugin] NON-FINITE FDM state #{self._nonfinite_count} at sim_time={sim_time}: {state}")
+            if self.json_str:
+                return self.json_str
+        else:
+            # Finite but extreme values (e.g. PhysX contact impulse) pass the
+            # isfinite check yet overflow float math inside SITL, which runs
+            # with FE_OVERFLOW|FE_DIVBYZERO enabled -> SIGFPE. Observe-only:
+            # log the first few so the crash stack (gdb) can be correlated.
+            _g = state["imu"]["gyro"]; _a = state["imu"]["accel_body"]; _vel = state["velocity"]
+            if (max(abs(x) for x in _g) > 50.0 or max(abs(x) for x in _a) > 500.0
+                    or max(abs(x) for x in _vel) > 200.0):
+                self._extreme_count = getattr(self, "_extreme_count", 0) + 1
+                if self._extreme_count <= 5:
+                    print(f"[ArduPilotPlugin] EXTREME FDM values #{self._extreme_count} at sim_time={sim_time}: {state}")
+
         json_str = json.dumps(state, separators=(',', ':'))
         json_str = "\n" + json_str + "\n"
         json_str = json_str.encode('utf-8')
@@ -110,6 +136,14 @@ class ArduPilotPlugin:
         
 
     def send_state(self):
+        # --- diagnostics: a wall-clock gap between sends longer than SITL's
+        # ~1 s JSON watchdog is what precedes "No JSON sensor message
+        # received" + SIGFPE. Make stalls visible in the autosim log.
+        _now = time.monotonic()
+        _last = getattr(self, "_last_send_wall", None)
+        if _last is not None and _now - _last > 0.7:
+            print(f"[ArduPilotPlugin] FDM send stalled {_now - _last:.2f}s wall (sim hitch)")
+        self._last_send_wall = _now
         if self.motor_control_sock:
             bytes_sent = self.motor_control_sock.sendto(
                 self.json_str,

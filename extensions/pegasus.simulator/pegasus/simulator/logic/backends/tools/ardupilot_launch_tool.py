@@ -124,6 +124,16 @@ class ArduPilotLaunchTool:
         else:
             argv = ["bash", "-c", command]
 
+        # SITL's SIGFPE/SIGSEGV handler runs `sh dumpstack.sh <pid>` relative to
+        # its cwd. Copy the dump scripts into the temp rootfs so a crash yields a
+        # gdb stack trace instead of "cannot open dumpstack.sh: No such file".
+        # (gdb must be installed and kernel.yama.ptrace_scope must permit attach.)
+        import shutil
+        for script in ("dumpstack.sh", "dumpcore.sh"):
+            source = os.path.join(self.ardupilot_dir, "Tools", "scripts", script)
+            if os.path.isfile(source):
+                shutil.copy(source, os.path.join(self.root_fs.name, script))
+
         self.ardupilot_process = subprocess.Popen(
             argv,
             cwd=self.root_fs.name,
