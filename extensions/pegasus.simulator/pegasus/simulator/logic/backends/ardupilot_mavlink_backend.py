@@ -627,6 +627,11 @@ class ArduPilotMavlinkBackend(Backend):
         self._sensor_data = SensorMsg()
 
         self.ap = ArduPilotPlugin(fdm_port_in=9002 + self._vehicle_id * 10)
+        # Wire the config's lockstep flag into the FDM plugin. Without this the
+        # plugin's isLockStep stays hardcoded False, so enable_lockstep=True is a
+        # no-op: the FDM runs on wall-clock timeouts and a slow sim (heavy render)
+        # starves SITL -> "No JSON sensor message received" -> SIGFPE core dump.
+        self.ap.isLockStep = self._enable_lockstep
         self.ap.drain_unread_packets()
 
         # Restart the connection
