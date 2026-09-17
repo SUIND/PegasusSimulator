@@ -54,6 +54,31 @@ class ArduPilotPlugin:
         self.last_controller_update_time = 0
         # Keep track of the time the last servo packet was received.
         self.last_servo_packet_recv_time = 0
+
+        # ---- lockstep bookkeeping (2026-09-17) -----------------------------------
+        # This plugin used to read ONE servo packet per physics step, wait at most
+        # 10 ms of wall time for it, and never drain the socket. Every reply that
+        # arrived late -- SITL descheduled past the window, or a duplicate during
+        # the boot handshake -- then sat in the queue for the rest of the session,
+        # and each one was 1.25 ms of permanent control delay that no log line
+        # ever reported. Measured on 2026-09-16/17: ~17 queued packets (21 ms) in
+        # a clean session, ~55 (70 ms) in the two whose airframe flew a 1.5 Hz yaw
+        # limit cycle. The fix is three things: drain to the newest packet every
+        # step, hold the last command on a transient miss instead of zeroing the
+        # rotors, and SAY what happened. See tests/test_ardupilot_plugin_lockstep.py.
+        # Wall seconds to wait for SITL's reply when online and in lockstep. A
+        # stall now costs wall time, never sim-time correctness.
+        self.lockstep_wait_s = 0.25
+        # Held on a transient miss. The backend zeroes the rotors on (), which on
+        # a single missed step is a 1.25 ms thrust cut -- a disturbance of its own.
+        self.last_pwm = ()
+        self.stat_steps = 0
+        self.stat_timeouts = 0
+        self.stat_drained = 0
+        self.stat_max_backlog = 0
+        self.stats_every_s = 10.0
+        self._last_stats_wall = time.monotonic()
+        self._announced = set()
         
         # Sockets
         self.motor_control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -209,42 +234,65 @@ class ArduPilotPlugin:
         print("Drained all packets.")
 
 
-    def receive_servo_packet(self):
-        # Determine wait time based on whether ArduPilot is online
-        wait_ms = 10 if self.arduPilotOnline else 1
-        wait_sec = wait_ms / 1000.0
+    def rx_queue_bytes(self):
+        """Bytes waiting unread on this plugin's socket, from /proc/net/udp.
 
-        pkt_frame_rate = 0
-        pkt_frame_count = 0
+        The kernel counts buffer truesize, about 960 B per 40 B servo packet on
+        loopback, so divide by ~960 for a packet count. -1 where unreadable.
+        This is the number that was 16320 in a session everyone thought was
+        healthy.
+        """
+        try:
+            port = self.motor_control_sock.getsockname()[1]
+            with open("/proc/net/udp") as f:
+                next(f)
+                for line in f:
+                    fld = line.split()
+                    if int(fld[1].split(":")[1], 16) == port:
+                        return int(fld[4].split(":")[1], 16)
+        except Exception:
+            return -1
+        return -1
+
+    def stats(self):
+        return {
+            "steps": self.stat_steps,
+            "timeouts": self.stat_timeouts,
+            "drained": self.stat_drained,
+            "max_backlog": self.stat_max_backlog,
+            "queue_bytes": self.rx_queue_bytes(),
+        }
+
+    def _maybe_print_stats(self, force=False):
+        now = time.monotonic()
+        if force or now - self._last_stats_wall >= self.stats_every_s:
+            self._last_stats_wall = now
+            s = self.stats()
+            print("[ArduPilotPlugin] lockstep: steps=%d timeouts=%d drained=%d max_backlog=%d queue_bytes=%d"
+                  % (s["steps"], s["timeouts"], s["drained"], s["max_backlog"], s["queue_bytes"]))
+
+    def _announce(self, key, msg):
+        if key not in self._announced:
+            self._announced.add(key)
+            print("[ArduPilotPlugin] " + msg)
+
+    def receive_servo_packet(self):
+        self.stat_steps += 1
+        # Online and in lockstep: wait for the reply. Otherwise the old short
+        # waits, so a dead SITL cannot stall a session that never had one.
+        if self.arduPilotOnline and self.isLockStep:
+            wait_sec = self.lockstep_wait_s
+        else:
+            wait_sec = 0.010 if self.arduPilotOnline else 0.001
 
         try:
-            # Set socket timeout based on wait_ms
             self.motor_control_sock.settimeout(wait_sec)
-
-            # Receive the data and get the client address and port
             data, (client_addr, client_out) = self.motor_control_sock.recvfrom(self.SERVO_PACKET_SIZE)
-
-            # Track the FCU (ArduPilot SITL) return address on every packet.
-            # Latching it only once breaks SITL restarts: replies keep going to
-            # the dead ephemeral port of the previous instance (lockstep mode
-            # never marks ArduPilot offline, so the stale address is never
-            # cleared) and the new arducopter loops on "No JSON sensor message
-            # received".
-            if (client_addr, client_out) != (self.fcu_address, self.fcu_port_out):
-                if self.fcu_address is not None:
-                    print(f"ArduPilot endpoint changed to {client_addr}:{client_out}")
-                self.fcu_address = client_addr
-                self.fcu_port_out = client_out
-
-            # Unpack the received packet
-            pkt_magic, pkt_frame_rate, pkt_frame_count, *pkt_pwm = self.unpack_servo_packet(data)
-            pkt_pwm = pkt_pwm[0]
-
-            if pkt_magic is None:
-                return False, ()
-            
         except socket.timeout:
+            self.stat_timeouts += 1
             if self.arduPilotOnline:
+                self._announce("timeout", "first servo timeout after %.0f ms (step %d); holding the last PWM"
+                               % (wait_sec * 1000.0, self.stat_steps))
                 self.connectionTimeoutCount += 1
                 if self.connectionTimeoutCount > self.connectionTimeoutMaxCount:
                     self.connectionTimeoutCount = 0
@@ -255,35 +303,74 @@ class ArduPilotPlugin:
                         print("Socket timeout")
                         self.arduPilotOnline = False
                         print(f"Broken ArduPilot connection, resetting motor control.")
+                        return False, ()
+            self._maybe_print_stats()
+            return False, (self.last_pwm if self.arduPilotOnline else ())
+
+        # DRAIN TO THE NEWEST. SITL's frame_count increments once per state it
+        # received, so a queue deeper than one packet means we are behind; the
+        # newest packet answers the most recent state SITL has seen and the
+        # rest are stale by exactly one physics step each.
+        backlog = 0
+        self.motor_control_sock.setblocking(False)
+        while True:
+            try:
+                data2, addr2 = self.motor_control_sock.recvfrom(self.SERVO_PACKET_SIZE)
+            except (BlockingIOError, socket.timeout):
+                break
+            except OSError:
+                break
+            backlog += 1
+            data, (client_addr, client_out) = data2, addr2
+        if backlog:
+            self.stat_drained += backlog
+            self.stat_max_backlog = max(self.stat_max_backlog, backlog)
+            self._announce("drained", "drained %d stale servo packets in one step (step %d): the queue had built up"
+                           % (backlog, self.stat_steps))
+
+        # Track the FCU (ArduPilot SITL) return address on every packet.
+        # Latching it only once breaks SITL restarts: replies keep going to
+        # the dead ephemeral port of the previous instance (lockstep mode
+        # never marks ArduPilot offline, so the stale address is never
+        # cleared) and the new arducopter loops on "No JSON sensor message
+        # received".
+        if (client_addr, client_out) != (self.fcu_address, self.fcu_port_out):
+            if self.fcu_address is not None:
+                print(f"ArduPilot endpoint changed to {client_addr}:{client_out}")
+            self.fcu_address = client_addr
+            self.fcu_port_out = client_out
+
+        pkt_magic, pkt_frame_rate, pkt_frame_count, *pkt_pwm = self.unpack_servo_packet(data)
+        pkt_pwm = pkt_pwm[0]
+        if pkt_magic is None:
             return False, ()
 
-        # Handle ArduPilot online status
         if not self.arduPilotOnline:
             print(f"Connected to ArduPilot controller @ {self.fcu_address}:{self.fcu_port_out}")
             self.arduPilotOnline = True
 
-        # Update frame rate
         self.fcu_frame_rate = pkt_frame_rate
 
-        # Check for controller reset, duplicate frames, or skipped frames
         if pkt_frame_count < self.fcu_frame_count:
             print("ArduPilot controller has reset")
         elif pkt_frame_count == self.fcu_frame_count:
+            # The boot handshake: SITL re-sends its servos once a second until it
+            # sees a state. Answer it, and hold the command we already have.
             print("Duplicate input frame")
             if self.isLockStep:
                 self.send_state()
-            return False, []
-        elif pkt_frame_count != self.fcu_frame_count + 1 and self.arduPilotOnline:
+            return False, self.last_pwm
+        elif pkt_frame_count != self.fcu_frame_count + 1 and self.arduPilotOnline and backlog == 0:
+            # A gap with NOTHING drained is a packet lost in flight, which is
+            # news; a gap after draining is just the stale packets we skipped.
             print(f"Missed {pkt_frame_count - self.fcu_frame_count} input frames")
 
-        # Update frame count
         self.fcu_frame_count = pkt_frame_count
-
-        # Reset the connection timeout count
-        self.connectionTimeoutCount = 0    
-
+        self.connectionTimeoutCount = 0
+        self.last_pwm = tuple(pkt_pwm)
+        self._maybe_print_stats()
         return True, pkt_pwm
-    
+
     def pre_update(self, sim_time):
         # Update the control surfaces
         recieved, pwms = self.receive_servo_packet()
