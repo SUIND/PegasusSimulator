@@ -23,6 +23,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import carb
 
+# Stereo baseline (m) between the left and right cameras of a pair, used for
+# the right camera's CameraInfo P[3] = -fx * B. The rig calibration
+# (cameras_cfg.T_bottom) has a -0.1605 m x-translation; 0.160 is kept for
+# continuity with WaspSim's configs/wasp_rig.yaml, which documents 0.160.
+RIGHT_CAMERA_BASELINE_M = 0.160
+
 
 class MonocularCamera(GraphicalSensor):
     """
@@ -153,24 +159,19 @@ class MonocularCamera(GraphicalSensor):
         writer = rep.writers.get("ROS2PublishCameraInfo")
         camera_info, _ = read_camera_info(render_product_path=render_product)
 
-        p_matrix = camera_info.p.reshape([1, 12])
-
+        p_matrix = np.array(camera_info.p, dtype=np.float64).reshape([1, 12])
 
         if "right" in self._camera_name:
+            # The right camera's P is the render product's own P (same fx, fy,
+            # cx, cy as its K, at whatever resolution it renders) with only
+            # the stereo term set: ROS CameraInfo wants P[3] = Tx = -fx' * B,
+            # B in METRES. This used to hard-code half-resolution intrinsics
+            # (fx 454.53, and cx 346.71 -- the LEFT camera's half-res cx) and
+            # Tx = -fx * 160.0, i.e. the baseline in millimetres, so at
+            # 1280x800 the message claimed full width with half-res intrinsics
+            # and a baseline 1000x too large.
+            p_matrix[0, 3] = -p_matrix[0, 0] * RIGHT_CAMERA_BASELINE_M
 
-            fx = 454.53
-            cx = 346.71
-            cy = 209.68
-            baseline_mm = 160.0
-
-            p_right = np.array([
-                fx, 0.0, cx, -fx * baseline_mm,
-                0.0, fx, cy, 0.0,
-                0.0, 0.0, 1.0, 0.0
-            ], dtype=np.float32).reshape(1, 12)
-
-            p_matrix = p_right
-        
         writer.initialize(
             frameId=frame_id,
             nodeNamespace=node_namespace,
