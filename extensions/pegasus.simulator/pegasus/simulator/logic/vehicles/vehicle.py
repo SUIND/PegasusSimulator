@@ -18,7 +18,8 @@ import omni.usd
 from isaacsim.core.utils.prims import define_prim, get_prim_at_path
 from omni.usd import get_stage_next_free_path
 from isaacsim.core.api.robots.robot import Robot
-from omni.isaac.dynamic_control import _dynamic_control
+# omni.isaac.dynamic_control is gone in Isaac Sim 6.x: its rigid-body calls live in body_interface
+from pegasus.simulator.logic.vehicles.body_interface import BodyInterface
 
 # Extension APIs
 from pegasus.simulator.logic.state import State
@@ -259,11 +260,8 @@ class Vehicle(Robot):
             body_part (str): . Defaults to "/body".
         """
 
-        # Get the handle of the rigidbody that we will apply the force to
-        rb = self.get_dc_interface().get_rigid_body(self._stage_prefix + body_part)
-
-        # Apply the force to the rigidbody. The force should be expressed in the rigidbody frame
-        self.get_dc_interface().apply_body_force(rb, carb._carb.Float3(force), carb._carb.Float3(pos), False)
+        # Accumulated in the rigidbody frame and applied by flush_forces() once per physics step
+        self.get_dc_interface().add_force(self._stage_prefix + body_part, force, pos)
 
     def apply_torque(self, torque, body_part="/body"):
         """
@@ -274,11 +272,16 @@ class Vehicle(Robot):
             body_part (str): . Defaults to "/body".
         """
 
-        # Get the handle of the rigidbody that we will apply a torque to
-        rb = self.get_dc_interface().get_rigid_body(self._stage_prefix + body_part)
+        # Accumulated in the rigidbody frame and applied by flush_forces() once per physics step
+        self.get_dc_interface().add_torque(self._stage_prefix + body_part, torque)
 
-        # Apply the torque to the rigidbody. The torque should be expressed in the rigidbody frame
-        self.get_dc_interface().apply_body_torque(rb, carb._carb.Float3(torque), False)
+    def flush_forces(self):
+        """
+        Apply the forces and torques accumulated by apply_force / apply_torque since the last call. A vehicle's
+        update() calls it once, after its last apply_*.
+        """
+        if self._vehicle_dc_interface is not None:
+            self._vehicle_dc_interface.flush()
 
     def update_state(self, dt: float):
         """
@@ -289,23 +292,19 @@ class Vehicle(Robot):
             dt (float): The time elapsed between the previous and current function calls (s).
         """
 
-        # Get the body frame interface of the vehicle (this will be the frame used to get the position, orientation, etc.)
-        body = self.get_dc_interface().get_rigid_body(self._stage_prefix + "/body")
+        # Nothing to read until PhysX is attached to the stage (the first steps after play)
+        if not self.get_dc_interface().ready():
+            return
 
-        # Get the current position and orientation in the inertial frame
-        pose = self.get_dc_interface().get_rigid_body_pose(body)
+        # The body frame of the vehicle (the frame used for the position, orientation, etc.)
+        body = self._stage_prefix + "/body"
 
-        # Get the attitude according to the convention [w, x, y, z]
-        prim = self._world.stage.GetPrimAtPath(self._stage_prefix + "/body")
-        rotation_quat = get_world_transform_xform(prim).GetQuaternion()
-        rotation_quat_real = rotation_quat.GetReal()
-        rotation_quat_img = rotation_quat.GetImaginary()
+        # The current position and orientation [qx, qy, qz, qw] in the inertial frame, from the physics engine
+        # (Isaac 6.x: omni.physics.tensors; the USD xform this used to read lags the physics state under fabric)
+        pose = self.get_dc_interface().get_pose(body)
 
-        # Get the angular velocity of the vehicle expressed in the body frame of reference
-        ang_vel = self.get_dc_interface().get_rigid_body_angular_velocity(body)
-
-        # The linear velocity [x_dot, y_dot, z_dot] of the vehicle's body frame expressed in the inertial frame of reference
-        linear_vel = self.get_dc_interface().get_rigid_body_linear_velocity(body)
+        # The linear [x_dot, y_dot, z_dot] and angular velocity of the body, both in the inertial frame
+        linear_vel, ang_vel = self.get_dc_interface().get_velocities(body)
 
         # Get the linear acceleration of the body relative to the inertial frame, expressed in the inertial frame
         # Note: we must do this approximation, since the Isaac sim does not output the acceleration of the rigid body directly
@@ -315,9 +314,7 @@ class Vehicle(Robot):
         self._state.position = np.array(pose.p)
 
         # Get the quaternion according in the [qx,qy,qz,qw] standard
-        self._state.attitude = np.array(
-            [rotation_quat_img[0], rotation_quat_img[1], rotation_quat_img[2], rotation_quat_real]
-        )
+        self._state.attitude = np.array(pose.r)
 
         # Express the velocity of the vehicle in the inertial frame X_dot = [x_dot, y_dot, z_dot]
         self._state.linear_velocity = np.array(linear_vel)
@@ -409,6 +406,6 @@ class Vehicle(Robot):
     def get_dc_interface(self):
 
         if self._vehicle_dc_interface is None:
-            self._vehicle_dc_interface = _dynamic_control.acquire_dynamic_control_interface()
+            self._vehicle_dc_interface = BodyInterface()
 
         return self._vehicle_dc_interface

@@ -13,17 +13,26 @@ import carb
 from pxr import Sdf
 
 # High level Isaac sim APIs
-import NavSchema
+# Isaac Sim 6.x: the navigation schemas are codeless; NavSchema.NavMeshExcludeAPI is now its registered name
+from omni.anim.navigation.schema import NAV_MESH_EXCLUDE_API
 import omni.client
 from isaacsim.core.utils import prims
 from omni.usd import get_stage_next_free_path
 from isaacsim.storage.native import get_assets_root_path
 
-# New imports from the replicator API
 import omni.anim.graph.core as ag
-import isaacsim.replicator.agent.core
-from isaacsim.replicator.agent.core.settings import PrimPaths
-from isaacsim.replicator.agent.core.stage_util import CharacterUtil
+
+# Isaac Sim 6.x restructured isaacsim.replicator.agent.core: settings.PrimPaths and
+# stage_util.CharacterUtil are gone. Pegasus used one constant and one loader from them;
+# both are re-implemented here (CHARACTERS_PARENT_PATH, _load_character_usd).
+CHARACTERS_PARENT_PATH = "/World/Characters"
+
+
+def _load_character_usd(usd_file, prim_path, init_pos, init_yaw):
+    """Reference a character USD at prim_path, placed at init_pos and turned init_yaw (rad) about z."""
+    q = Rotation.from_euler('z', init_yaw, degrees=False).as_quat()  # x, y, z, w
+    return prims.create_prim(prim_path, "Xform", translation=list(init_pos),
+                             orientation=[q[3], q[0], q[1], q[2]], usd_path=usd_file)
 
 # Extension APIs
 from pegasus.simulator.logic.state import State
@@ -38,7 +47,7 @@ class Person:
 
     # Get root assets path from setting, if not set, get the Isaac-Sim asset path
     people_asset_folder = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/People/Characters/"
-    character_root_prim_path = PrimPaths.characters_parent_path()
+    character_root_prim_path = CHARACTERS_PARENT_PATH
 
     assets_root_path = None   
 
@@ -245,12 +254,9 @@ class Person:
 
     def spawn_agent(self, usd_file, stage_name, init_pos, init_yaw):
 
-        # Get the last name after the last slash in the stage name
-        # We only want the name of the character, not the full path
-        character_name = stage_name.split("/")[-1]
-
-        # Spawn the character in the stage using the NVIDIA replicar API (which is suprisingly similar to the original version I provided in this function in version 4.2.0)
-        CharacterUtil.load_character_usd_to_stage(usd_file, init_pos, init_yaw, character_name)
+        # Spawn the character at its stage path (CharacterUtil.load_character_usd_to_stage did the same under
+        # /World/Characters/<name>, which is where stage_name already is)
+        _load_character_usd(usd_file, stage_name, init_pos, init_yaw)
 
         # Add the current person to the person manager
         PeopleManager.get_people_manager().add_person(self._stage_prefix, self)
@@ -259,7 +265,7 @@ class Person:
         self.character_skel_root, self.character_skel_root_stage_path = Person._transverse_prim(self._current_stage, self._stage_prefix)
 
         # Update the navigation mesh to include the character skeleton root prim
-        omni.kit.commands.execute("ApplyNavMeshAPICommand", prim_path=stage_name, api=NavSchema.NavMeshExcludeAPI)
+        omni.kit.commands.execute("ApplyNavMeshAPICommand", prim_path=stage_name, api=NAV_MESH_EXCLUDE_API)
 
         # If the base biped character is not present in the stage, spawn it
         if not self._current_stage.GetPrimAtPath(Person.character_root_prim_path + "/Biped_Setup"):

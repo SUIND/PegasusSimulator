@@ -144,7 +144,7 @@ class MonocularCamera(GraphicalSensor):
         self._camera_full_set = False
 
     def publish_camera_info(self, freq=15):
-        from isaacsim.ros2.bridge import read_camera_info
+        from isaacsim.ros2.core import read_camera_info
         import omni.replicator.core as rep
         # The following code will link the camera's render product and publish the data to the specified topic name.
         render_product = self._camera._render_product_path

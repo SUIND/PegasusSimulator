@@ -37,12 +37,19 @@ icon = "data/icon.png"
 "omni.ui" = {}
 "omni.usd" = {}
 "omni.kit.uiapp" = {}
-"omni.isaac.core" = {}
+# Isaac Sim 6.x: omni.isaac.core is gone. Its successors (deprecated, still shipped in extsDeprecated),
+# omni.physics.tensors for the rigid-body calls dynamic_control made (logic/vehicles/body_interface.py)
+"isaacsim.core.api" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.sensors.camera" = {}
+"omni.physics.tensors" = {}
 "omni.ui.scene" = {}
 "omni.kit.capture.viewport" = {}
 "omni.kit.widget.viewport" = {}
 "omni.kit.hydra_texture" = {}
-"isaacsim.replicator.agent.core" = {}
+# people: the animation graph and navigation (isaacsim.replicator.agent.core is no longer imported)
+"omni.anim.graph.core" = {}
+"omni.anim.navigation.core" = {}
 
 # Main python module this extension provides, it will be publicly available as "import pegasus.simulator".
 [[python.module]]

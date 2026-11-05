@@ -15,7 +15,7 @@ import json
 import carb
 import omni.ui as ui
 import omni.graph.core as og
-from omni.isaac.core.utils.stage import add_reference_to_stage, get_current_stage
+from isaacsim.core.utils.stage import add_reference_to_stage, get_current_stage
 from pxr import Usd, UsdGeom
 # Extension Configurations
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS, BACKENDS, WORLD_SETTINGS

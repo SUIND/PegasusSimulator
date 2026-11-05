@@ -5,9 +5,8 @@
 | Description: Definition of the Multirotor class which is used as the base for all the multirotor vehicles.
 """
 
+import carb
 import numpy as np
-
-from omni.isaac.dynamic_control import _dynamic_control
 
 # The vehicle interface
 from pegasus.simulator.logic.vehicles.vehicle import Vehicle
@@ -105,8 +104,18 @@ class Multirotor(Vehicle):
             dt (float): The time elapsed between the previous and current function calls (s).
         """
 
-        # Get the articulation root of the vehicle
-        articulation = self.get_dc_interface().get_articulation(self._stage_prefix)
+        # A status line every 8000 physics steps (10 s of sim at 800 Hz): whether the FDM link is up is
+        # otherwise visible only as SITL silently waiting.
+        self._update_calls = getattr(self, "_update_calls", 0) + 1
+        if self._update_calls == 1 or self._update_calls % 8000 == 0:
+            ap = getattr(self._backends[0], "ap", None) if self._backends else None
+            carb.log_warn("[multirotor] update #%d: physics view %s, FDM online %s, z %.2f"
+                          % (self._update_calls, self.get_dc_interface().ready(),
+                             getattr(ap, "arduPilotOnline", None), self._state.position[2]))
+
+        # No forces before PhysX is attached to the stage (the first steps after play)
+        if not self.get_dc_interface().ready():
+            return
 
         # Get the desired angular velocities for each rotor from the first backend (can be mavlink or other) expressed in rad/s
         if len(self._backends) != 0:
@@ -126,8 +135,8 @@ class Multirotor(Vehicle):
             # Apply the force in Z on the rotor frame
             self.apply_force([0.0, 0.0, forces_z[i]], body_part="/rotor" + str(i))
 
-            # Generate the rotating propeller visual effect
-            self.handle_propeller_visual(i, forces_z[i], articulation)
+            # The rotating propeller visual effect (handle_propeller_visual) is not driven on Isaac 6.x:
+            # it set rotor joint velocities through omni.isaac.dynamic_control, which is gone.
 
         # Apply the torque to the body frame of the vehicle that corresponds to the rolling moment
         self.apply_torque([0.0, 0.0, rolling_moment], "/body")
@@ -135,6 +144,9 @@ class Multirotor(Vehicle):
         # Compute the total linear drag force to apply to the vehicle's body frame
         drag = self._drag.update(self._state, dt)
         self.apply_force(drag, body_part="/body")
+
+        # Everything above is accumulated per body; apply it for this physics step
+        self.flush_forces()
 
         # Call the update methods in all backends
         for backend in self._backends:
@@ -151,18 +163,8 @@ class Multirotor(Vehicle):
             articulation (_type_): The articulation group the joints of the rotors belong to
         """
 
-        # Rotate the joint to yield the visual of a rotor spinning (for animation purposes only)
-        joint = self.get_dc_interface().find_articulation_dof(articulation, "joint" + str(rotor_number))
-
-        # Spinning when armed but not applying force
-        if 0.0 < force < 0.1:
-            self.get_dc_interface().set_dof_velocity(joint, 5 * self._thrusters.rot_dir[rotor_number])
-        # Spinning when armed and applying force
-        elif 0.1 <= force:
-            self.get_dc_interface().set_dof_velocity(joint, 100 * self._thrusters.rot_dir[rotor_number])
-        # Not spinning
-        else:
-            self.get_dc_interface().set_dof_velocity(joint, 0)
+        # A no-op on Isaac 6.x: the joint velocities were set through omni.isaac.dynamic_control, which is gone.
+        return
 
     def force_and_torques_to_velocities(self, force: float, torque: np.ndarray):
         """
@@ -180,14 +182,10 @@ class Multirotor(Vehicle):
             list: A list of angular velocities [rad/s] to apply in reach rotor to accomplish suchs forces and torques
         """
 
-        # Get the body frame of the vehicle
-        rb = self.get_dc_interface().get_rigid_body(self._stage_prefix + "/body")
-
-        # Get the rotors of the vehicle
-        rotors = [self.get_dc_interface().get_rigid_body(self._stage_prefix + "/rotor" + str(i)) for i in range(self._thrusters._num_rotors)]
-
-        # Get the relative position of the rotors with respect to the body frame of the vehicle (ignoring the orientation for now)
-        relative_poses = self.get_dc_interface().get_relative_body_poses(rb, rotors)
+        # The relative position of the rotors with respect to the body frame of the vehicle (ignoring the orientation for now)
+        relative_poses = self.get_dc_interface().get_relative_poses(
+            self._stage_prefix + "/body",
+            [self._stage_prefix + "/rotor" + str(i) for i in range(self._thrusters._num_rotors)])
 
         # Define the alocation matrix
         aloc_matrix = np.zeros((4, self._thrusters._num_rotors))
